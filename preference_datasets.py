@@ -160,21 +160,35 @@ def get_hh(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str,
     return data
 
 
-def get_cctc(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
+def output_format(test_suite, shuffle=False, seed=42):
+    assert len(test_suite['input']) == len(test_suite['output'])
+    
+    indices = list(range(len(test_suite['input'])))
+    if shuffle:
+        import random
+        random.seed(seed)
+        random.shuffle(indices)
+    
+    result = ""    
+    for i, j in enumerate(indices):
+        _input = test_suite['input'][j].replace("\n", "\\n")
+        _output = test_suite['output'][j].replace("\n", "\\n")
+        result += f"# {i}th test case\n"
+        result += f"INPUT = \"{_input}\"\n"
+        result += f"OUTPUT = \"{_output}\"\n\n"
+    return result
+
+
+import copy
+def build_rejected_test_suite(suite, seed):
+    result = copy.deepcopy(suite)
+    # TBD
+    return None
+
+
+def get_cctc(split: str, silent: bool = False, cache_dir: str = None, seed: int = 42) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
     """Load the CodeContests dataset from Huggingface and convert it to the necessary format.
     
-       The dataset is converted to a dictionary with the following structure:
-       {
-           'prompt1': {
-               'responses': List[str],
-               'pairs': List[Tuple[int, int]],
-               'sft_target': str
-           },
-           'prompt2': {
-               ...
-           },
-       }
-
        Prompts should be structured as follows:
          \n\nHuman: <prompt>\n\nAssistant:
        Multiple turns are allowed, but the prompt should always start with \n\nHuman: and end with \n\nAssistant:.
@@ -185,22 +199,58 @@ def get_cctc(split: str, silent: bool = False, cache_dir: str = None) -> Dict[st
     dataset = datasets.load_dataset('deepmind/code_contests', split=split, cache_dir=cache_dir)
     print('done')
 
-    def split_prompt_and_responses(ex):
-        prompt = extract_anthropic_prompt(ex['chosen'])
-        chosen_response = ex['chosen'][len(prompt):]
-        rejected_response = ex['rejected'][len(prompt):]
-        return prompt, chosen_response, rejected_response
+    def split_prompt_and_responses(ex, seed):
+        prompt = ex['description'].split("\n\nExample")[0]
+        test_suite = {key: d['public_tests'][key]+d['generated_tests'][key] for key in ['input', 'output']}
+        chosen_response = output_format(test_suite, shuffle=True, seed=seed)
+        rejected_test_suite = build_rejected_test_suite(test_suite, seed=seed)
+        rejected_response = output_format(rejected_test_suite, shuffle=True, seed=seed+1)
+        
+        return prompt, test_suite, chosen_response, rejected_response
 
     data = defaultdict(lambda: defaultdict(list))
-    for row in tqdm.tqdm(dataset, desc='Processing HH', disable=silent):
-        prompt, chosen, rejected = split_prompt_and_responses(row)
+    for row in tqdm.tqdm(dataset, desc='Processing CCTC', disable=silent):
+        prompt, test_suite, chosen, rejected = split_prompt_and_responses(row)
         responses = [chosen, rejected]
         n_responses = len(data[prompt]['responses'])
         data[prompt]['pairs'].append((n_responses, n_responses + 1))
+        data[prompt]['test_suite'].append(test_suite)
         data[prompt]['responses'].extend(responses)
         data[prompt]['sft_target'] = chosen
 
     return data
+
+# +
+# split='train'
+# silent=False
+# cache_dir=None
+# print(f'Loading CodeContests dataset ({split} split) from Huggingface...')
+# dataset = datasets.load_dataset('deepmind/code_contests', split=split, cache_dir=cache_dir)
+# print('done')
+
+# def split_prompt_and_responses(ex):
+#     prompt = ex['description'].split("\n\nExample")[0]
+#     test_suite = {key: ex['public_tests'][key]+ex['generated_tests'][key] for key in ['input', 'output']}
+#     return prompt, test_suite
+
+# +
+# data = defaultdict(lambda: defaultdict(list))
+# for row in tqdm.tqdm(dataset, desc='Processing CCTC', disable=silent):
+#     prompt, test_suite = split_prompt_and_responses(row)
+#     n_responses = len(data[prompt]['responses'])
+#     data[prompt]['pairs'].append((n_responses, n_responses + 1))
+#     data[prompt]['responses'].extend(test_suite)
+#     data[prompt]['sft_target'] = test_suite
+#     break
+
+# +
+# test_suite
+# -
+
+
+
+
+
 
 
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
