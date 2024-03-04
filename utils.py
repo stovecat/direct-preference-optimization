@@ -1,3 +1,5 @@
+import json
+import pickle
 import os
 import getpass
 from datetime import datetime
@@ -11,6 +13,30 @@ import socket
 import os
 from typing import Dict, Union, Type, List
 
+
+# +
+def raw_open_file(path):
+    with open(path, "r") as f:
+        data = json.load(f)
+    return data
+
+def dump_pkl(data, path):
+    with open(path, "wb") as fp:
+        pickle.dump(data, fp, pickle.HIGHEST_PROTOCOL)
+        
+def load_json(path):
+    with open(path, "r") as fp:
+        data = json.load(fp)
+    return data
+
+def load_pkl(path):
+    with open(path, "rb") as fp:
+        data = pickle.load(fp)
+    return data
+    
+
+
+# -
 
 def get_open_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -50,7 +76,7 @@ def get_local_dir(prefixes_to_resolve: List[str]) -> str:
             return f"{prefix}/{getpass.getuser()}"
     os.makedirs(prefix)
     return f"{prefix}/{getpass.getuser()}"
-    
+
 
 def get_local_run_dir(exp_name: str, local_dirs: List[str]) -> str:
     """Create a local directory to store outputs for this run, and return its path."""
@@ -94,7 +120,7 @@ def all_gather_if_needed(values: torch.Tensor, rank: int, world_size: int) -> to
 def formatted_dict(d: Dict) -> Dict:
     """Format a dictionary for printing."""
     return {k: (f"{v:.5g}" if type(v) == float else v) for k, v in d.items()}
-    
+
 
 def disable_dropout(model: torch.nn.Module):
     """Disable dropout in a model."""
@@ -173,3 +199,5 @@ class TemporarilySeededRandom:
         # Restore the random state
         random.setstate(self.stored_state)
         np.random.set_state(self.stored_np_state)
+
+
