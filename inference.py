@@ -72,7 +72,6 @@ if __name__ == '__main__':
     results = []
     with torch.no_grad():
         for i in tqdm(range(len(data))):
-            i=40
             _prompt = data[i]["prompt"]
             _input = get_description(_prompt)
 
