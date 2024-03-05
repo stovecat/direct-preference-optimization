@@ -169,7 +169,7 @@ def output_format(test_suite, shuffle=False, seed=42):
         random.seed(seed)
         random.shuffle(indices)
     
-    result = ""    
+    result = "\n"    
     for i, j in enumerate(indices):
         _input = test_suite['input'][j].replace("\n", "\\n")
         _output = test_suite['output'][j].replace("\n", "\\n")
@@ -186,7 +186,7 @@ def build_rejected_test_suite(suite, seed):
     return None
 
 
-def get_cctc(split: str, silent: bool = False, cache_dir: str = None, seed: int = 42) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
+def get_cctg(split: str, silent: bool = False, cache_dir: str = None, seed: int = 42) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
     """Load the CodeContests dataset from Huggingface and convert it to the necessary format.
     
        Prompts should be structured as follows:
@@ -197,20 +197,27 @@ def get_cctc(split: str, silent: bool = False, cache_dir: str = None, seed: int 
     """
     print(f'Loading CodeContests dataset ({split} split) from Huggingface...')
     dataset = datasets.load_dataset('deepmind/code_contests', split=split, cache_dir=cache_dir)
+    if split == 'train':
+        PYTHON3 = 3
+        dataset = [d for d in dataset if PYTHON3 in d['solutions']['language']]
     print('done')
 
     def split_prompt_and_responses(ex, seed):
         prompt = ex['description'].split("\n\nExample")[0]
-        test_suite = {key: d['public_tests'][key]+d['generated_tests'][key] for key in ['input', 'output']}
+        prompt = "\n".join(["# "+l for l in prompt.split('\n')])
+        test_suite = {key: ex['public_tests'][key]+ex['generated_tests'][key] for key in ['input', 'output']}
         chosen_response = output_format(test_suite, shuffle=True, seed=seed)
         rejected_test_suite = build_rejected_test_suite(test_suite, seed=seed)
-        rejected_response = output_format(rejected_test_suite, shuffle=True, seed=seed+1)
+        rejected_response = None
+        if rejected_test_suite is not None:
+            rejected_response = output_format(rejected_test_suite, shuffle=True, seed=seed+1)
+        
         
         return prompt, test_suite, chosen_response, rejected_response
 
     data = defaultdict(lambda: defaultdict(list))
-    for row in tqdm.tqdm(dataset, desc='Processing CCTC', disable=silent):
-        prompt, test_suite, chosen, rejected = split_prompt_and_responses(row)
+    for row in tqdm.tqdm(dataset, desc='Processing CCTG', disable=silent):
+        prompt, test_suite, chosen, rejected = split_prompt_and_responses(row, seed)
         responses = [chosen, rejected]
         n_responses = len(data[prompt]['responses'])
         data[prompt]['pairs'].append((n_responses, n_responses + 1))
@@ -235,7 +242,7 @@ def get_cctc(split: str, silent: bool = False, cache_dir: str = None, seed: int 
 
 # +
 # data = defaultdict(lambda: defaultdict(list))
-# for row in tqdm.tqdm(dataset, desc='Processing CCTC', disable=silent):
+# for row in tqdm.tqdm(dataset, desc='Processing CCTG', disable=silent):
 #     prompt, test_suite = split_prompt_and_responses(row)
 #     n_responses = len(data[prompt]['responses'])
 #     data[prompt]['pairs'].append((n_responses, n_responses + 1))
@@ -250,23 +257,22 @@ def get_cctc(split: str, silent: bool = False, cache_dir: str = None, seed: int 
 
 
 
-
-
-
-def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
+def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None, seed: int = None):
     """Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'."""
+    KEYS = {'responses', 'pairs', 'sft_target'}
     if name == 'shp':
         data = get_shp(split, silent=silent, cache_dir=cache_dir)
     elif name == 'hh':
         data = get_hh(split, silent=silent, cache_dir=cache_dir)
     elif name == 'se':
         data = get_se(split, silent=silent, cache_dir=cache_dir)
-    elif name == 'cctc':
-        data = get_cctc(split, silent=silent, cache_dir=cache_dir)        
+    elif name == 'cctg':
+        data = get_cctg(split, silent=silent, cache_dir=cache_dir, seed=seed)        
+        KEYS.add('test_suite')
     else:
         raise ValueError(f"Unknown dataset '{name}'")
-
-    assert set(list(data.values())[0].keys()) == {'responses', 'pairs', 'sft_target'}, \
+    
+    assert set(list(data.values())[0].keys()) == KEYS, \
         f"Unexpected keys in dataset: {list(list(data.values())[0].keys())}"
 
     return data
@@ -415,6 +421,9 @@ def get_batch_iterator(names: List[str],
             for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir).items():
                 flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
 
+    if 'cctg' in names:
+        _seed = 42
+                
     collate_fn = get_collate_fn(tokenizer)
 
     epoch_idx = 0
@@ -464,6 +473,16 @@ def get_batch_iterator(names: List[str],
             break
 
         epoch_idx += 1
+        
+        if 'cctg' in names:
+            _seed += 1
+            with TemporarilySeededRandom(seed):
+                permutation_seeds = iter(np.random.randint(0, 2**32, size=1000000))
+                flat_data = []
+                for name in names:
+                    truncation_mode = 'keep_end' if name == 'hh' else 'keep_start'
+                    for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir, seed=_seed).items():
+                        flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
 
 
 def strings_match_up_to_spaces(str_a: str, str_b: str) -> bool:

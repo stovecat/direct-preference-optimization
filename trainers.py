@@ -173,9 +173,13 @@ class BasicTrainer(object):
         self.policy = policy
         self.reference_model = reference_model
 
+        print("GET TRAIN BATCH ITERATOR")
+#         self.train_iterator = get_batch_iterator(**data_iterator_kwargs, split='test', n_epochs=config.n_epochs, n_examples=config.n_examples, batch_size=config.batch_size, silent=rank != 0, cache_dir=get_local_dir(config.local_dirs))
         self.train_iterator = get_batch_iterator(**data_iterator_kwargs, split='train', n_epochs=config.n_epochs, n_examples=config.n_examples, batch_size=config.batch_size, silent=rank != 0, cache_dir=get_local_dir(config.local_dirs))
         rank0_print(f'Loaded train data iterator')
-        self.eval_iterator = get_batch_iterator(**data_iterator_kwargs, split='test', n_examples=config.n_eval_examples, batch_size=config.eval_batch_size, silent=rank != 0, cache_dir=get_local_dir(config.local_dirs))
+        print("GET TEST BATCH ITERATOR")
+        self.eval_iterator = get_batch_iterator(**data_iterator_kwargs, split='valid', n_examples=config.n_eval_examples, batch_size=config.eval_batch_size, silent=rank != 0, cache_dir=get_local_dir(config.local_dirs))
+#         self.eval_iterator = get_batch_iterator(**data_iterator_kwargs, split='test', n_examples=config.n_eval_examples, batch_size=config.eval_batch_size, silent=rank != 0, cache_dir=get_local_dir(config.local_dirs))
         self.eval_batches = list(self.eval_iterator)
         rank0_print(f'Loaded {len(self.eval_batches)} eval batches of size {config.eval_batch_size}')
 
@@ -518,7 +522,7 @@ class FSDPTrainer(BasicTrainer):
             scheduler_state_dict = self.scheduler.state_dict()
             self.write_state_dict(self.example_counter, scheduler_state_dict, metrics, 'scheduler.pt', output_dir)
         dist.barrier()
-        
+
 
 class TensorParallelTrainer(BasicTrainer):
     def __init__(self, policy, config, seed, run_dir, reference_model=None, rank=0, world_size=1):
@@ -542,4 +546,4 @@ class TensorParallelTrainer(BasicTrainer):
     
         self.write_state_dict(self.example_counter, policy_state_dict, metrics, 'policy.pt', output_dir)
         del policy_state_dict
-        
+

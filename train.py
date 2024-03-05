@@ -67,7 +67,7 @@ def main(config: DictConfig):
         config.fsdp_port = free_port
 
     print(OmegaConf.to_yaml(config))
-
+    
     config_path = os.path.join(config.local_run_dir, 'config.yaml')
     with open(config_path, 'w') as f:
         OmegaConf.save(config, f)
