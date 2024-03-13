@@ -169,7 +169,7 @@ def output_format(test_suite, shuffle=False, seed=42):
         random.seed(seed)
         random.shuffle(indices)
     
-    result = "\n"    
+    result = "\n"
     for i, j in enumerate(indices):
         _input = test_suite['input'][j].replace("\n", "\\n")
         _output = test_suite['output'][j].replace("\n", "\\n")
@@ -182,8 +182,22 @@ def output_format(test_suite, shuffle=False, seed=42):
 import copy
 def build_rejected_test_suite(suite, seed):
     result = copy.deepcopy(suite)
-    # TBD
-    return None
+    
+    n_tcs = len(suite['input'])
+    for i in range(n_tcs):
+        INPUT = suite['input'][i]
+        OUTPUT = suite['output'][i]
+        OUTPUT_SET = set(suite['output'])
+        OUTPUT_SET.remove(OUTPUT)
+        OUTPUTS = list(OUTPUT_SET)
+        if len(OUTPUTS) == 0:
+            continue
+        random.shuffle(OUTPUTS)
+        WRONG_OUTPUT = OUTPUTS[0]
+        result['output'][i] = WRONG_OUTPUT
+        assert suite['output'][i] != result['output'][i]
+    
+    return result
 
 
 def get_cctg(split: str, silent: bool = False, cache_dir: str = None, seed: int = 42) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
@@ -202,15 +216,16 @@ def get_cctg(split: str, silent: bool = False, cache_dir: str = None, seed: int 
         dataset = [d for d in dataset if PYTHON3 in d['solutions']['language']]
     print('done')
 
-    def split_prompt_and_responses(ex, seed):
+    def split_prompt_and_responses(ex, _seed):
         prompt = ex['description'].split("\n\nExample")[0]
         prompt = "\n".join(["# "+l for l in prompt.split('\n')])
         test_suite = {key: ex['public_tests'][key]+ex['generated_tests'][key] for key in ['input', 'output']}
-        chosen_response = output_format(test_suite, shuffle=True, seed=seed)
-        rejected_test_suite = build_rejected_test_suite(test_suite, seed=seed)
+        chosen_response = output_format(test_suite, shuffle=True, seed=_seed)
+        rejected_test_suite = build_rejected_test_suite(test_suite, seed=_seed)
         rejected_response = None
         if rejected_test_suite is not None:
-            rejected_response = output_format(rejected_test_suite, shuffle=True, seed=seed+1)
+            rej_seed = _seed + 1
+            rejected_response = output_format(rejected_test_suite, shuffle=True, seed=rej_seed)
         
         
         return prompt, test_suite, chosen_response, rejected_response
@@ -413,16 +428,16 @@ def get_batch_iterator(names: List[str],
         datasets.logging.disable_progress_bar()
         datasets.logging.set_verbosity_error()
 
+    _seed = 42
+        
     with TemporarilySeededRandom(seed):
         permutation_seeds = iter(np.random.randint(0, 2**32, size=1000000))
         flat_data = []
         for name in names:
             truncation_mode = 'keep_end' if name == 'hh' else 'keep_start'
-            for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir).items():
+            for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir, seed=_seed).items():
                 flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
 
-    if 'cctg' in names:
-        _seed = 42
                 
     collate_fn = get_collate_fn(tokenizer)
 

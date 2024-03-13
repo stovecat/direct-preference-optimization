@@ -36,12 +36,14 @@ def get_description(prompt):
 if __name__ == '__main__':
     
     # Config
-    ckpt_path = f"{cache_dir}/cctg_sft_santacoder1b_2024-03-04_12-58-52_242520/step-134400"
+#     ckpt_path = f"{cache_dir}/cctg_sft_santacoder1b_2024-03-04_12-58-52_242520/step-134400"
+#     ckpt_path = f"{cache_dir}/cctg_sft_santacoder1b_2024-03-05_10-10-16_473711/step-59904"
+    ckpt_path = f"{cache_dir}/cctg_dpo_santacoder1b_2024-03-06_03-07-32_863662/step-159744"
     model_name = "bigcode/santacoder"
     max_input_len = 512
     max_new_tokens = 512
     benchmark_name = "openai_humaneval"
-    device = 2
+    device = 3
 
     
     # Initialize model

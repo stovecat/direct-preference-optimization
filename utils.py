@@ -20,6 +20,10 @@ def raw_open_file(path):
         data = json.load(f)
     return data
 
+def dump_json(data, path):
+    with open(path, "w") as fp:
+        json.dump(data, fp)
+
 def dump_pkl(data, path):
     with open(path, "wb") as fp:
         pickle.dump(data, fp, pickle.HIGHEST_PROTOCOL)
@@ -34,7 +38,6 @@ def load_pkl(path):
         data = pickle.load(fp)
     return data
     
-
 
 # -
 
